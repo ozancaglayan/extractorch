@@ -6,6 +6,8 @@ from pathlib import Path
 
 import numpy as np
 
+from tqdm import tqdm
+
 
 import torch
 import torch.nn.functional as F
@@ -88,7 +90,7 @@ if __name__ == '__main__':
     ######################
     # Main extraction loop
     ######################
-    for bidx, batch in enumerate(loader):
+    for bidx, batch in enumerate(tqdm(loader, unit='batch', ncols=70)):
         x = torch.tensor(batch, device=args.device, dtype=torch.float32)
         out = model(x)
 
@@ -100,8 +102,6 @@ if __name__ == '__main__':
                 out = F.normalize(out.view(n, c, -1), dim=1).view(n, c, h, w)
 
         feats[bidx * bs: (bidx + 1) * bs] = out.data.to('cpu')
-
-        print('{:3}/{:3} batches completed.'.format(bidx + 1, n_batches), end='\r')
 
     ###############
     # Save the file
