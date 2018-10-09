@@ -31,7 +31,7 @@ if __name__ == '__main__':
     # Load features
     feats = np.load(args.input_npy)
 
-    if args.top_k > 0 and feats.shape[1] != 1000:
+    if args.top_k > 0 and feats.shape[1] not in (1000, 365):
         print('Top-k only useful if features are classification scores.')
         sys.exit(1)
 
@@ -54,7 +54,6 @@ if __name__ == '__main__':
         st += n_imgs
 
     out_shape = (len(count_imgs), feats.shape[1])
-
     per_video = np.zeros(out_shape, dtype='float32')
     per_seg = np.zeros(out_shape, dtype='float32')
 
