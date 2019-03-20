@@ -50,7 +50,7 @@ if __name__ == '__main__':
                         help='resnet[18/34/50/152], resnet18_places365, resnet50_places365')
     parser.add_argument('-n', '--l2norm', action='store_true',
                         help='Save l2 normalized version as well (for layer != prob).')
-    parser.add_argument('-l', '--layer', default='res4f_relu',
+    parser.add_argument('-l', '--layer', default='res5c_relu',
                         help='res4f_relu/res5c_relu/avgpool/prob')
     parser.add_argument('-d', '--device', default='cpu',
                         help='cpu or gpu')
