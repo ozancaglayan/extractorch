@@ -11,7 +11,6 @@ from tqdm import tqdm
 
 import torch
 import torch.nn.functional as F
-from torch.autograd import Variable
 import torch.utils.data as data
 
 
@@ -48,19 +47,21 @@ if __name__ == '__main__':
     parser.add_argument('-w', '--width', type=int, default=224,
                         help='Final image width and height.')
     parser.add_argument('-m', '--model', type=str, default='resnet50',
-                        help='resnet[18/34/50/152]')
+                        help='resnet[18/34/50/152], resnet18_places365, resnet50_places365')
     parser.add_argument('-n', '--l2norm', action='store_true',
-                        help='Apply l2 normalization.')
+                        help='Save l2 normalized version as well (for layer != prob).')
     parser.add_argument('-l', '--layer', default='res4f_relu',
                         help='res4f_relu/res5c_relu/avgpool/prob')
     parser.add_argument('-d', '--device', default='cpu',
-                        help='cpu or cuda')
+                        help='cpu or gpu')
 
     # Parse arguments
     args = parser.parse_args()
     root = Path(args.folder)
     split = root.name
     bs = args.batch_size
+
+    args.device = 'cuda' if args.device == 'gpu' else 'cpu'
 
     # Disable gradient tracking
     torch.set_grad_enabled(False)
@@ -84,6 +85,9 @@ if __name__ == '__main__':
 
     # Create placeholder
     feats = np.zeros((len(dataset), *model.output_shape(args.width, args.width)))
+    if args.layer != 'prob' and args.l2norm:
+        feats_norm = np.zeros(
+            (len(dataset), *model.output_shape(args.width, args.width)))
 
     model.set_device(args.device)
 
@@ -93,21 +97,23 @@ if __name__ == '__main__':
     for bidx, batch in enumerate(tqdm(loader, unit='batch', ncols=70)):
         x = torch.tensor(batch, device=args.device, dtype=torch.float32)
         out = model(x)
+        feats[bidx * bs: (bidx + 1) * bs] = out.data.to('cpu')
 
         if args.layer != 'prob' and args.l2norm:
             if out.dim() == 2:
-                out = F.normalize(out, dim=-1)
+                feats_norm[bidx * bs: (bidx + 1) * bs] = F.normalize(
+                        out, dim=-1).data.to('cpu')
             else:
                 n, c, h, w = out.shape
-                out = F.normalize(out.view(n, c, -1), dim=1).view(n, c, h, w)
-
-        feats[bidx * bs: (bidx + 1) * bs] = out.data.to('cpu')
+                feats_norm[bidx * bs: (bidx + 1) * bs] = F.normalize(
+                    out.view(n, c, -1), dim=1).view(n, c, h, w).data.to('cpu')
 
     ###############
     # Save the file
     ###############
     output = "{}-{}-{}-r{}-c{}".format(
         split, args.model, args.layer, resize_width, args.width)
+    np.save(output, feats.astype('float16'))
     if args.layer != 'prob' and args.l2norm:
         output += '-l2norm'
-    np.save(output, feats.astype('float16'))
+        np.save(output, feats_norm.astype('float16'))
