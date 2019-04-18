@@ -95,8 +95,7 @@ if __name__ == '__main__':
     # Main extraction loop
     ######################
     for bidx, batch in enumerate(tqdm(loader, unit='batch', ncols=70)):
-        x = torch.tensor(batch, device=args.device, dtype=torch.float32)
-        out = model(x)
+        out = model(batch.to(device=args.device))
         feats[bidx * bs: (bidx + 1) * bs] = out.data.to('cpu')
 
         if args.layer != 'prob' and args.l2norm:
