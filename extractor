@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import re
 import argparse
 from pathlib import Path
 
@@ -8,14 +9,12 @@ import numpy as np
 
 from tqdm import tqdm
 
-
 import torch
 import torch.nn.functional as F
 import torch.utils.data as data
 
-
+from extractorch import get_cnn
 from extractorch.dataset import ImageFolderDataset
-from extractorch.resnet import ResNet
 
 # This script uses the PyTorch's pre-trained ResNet-50 CNN to extract
 #   res4f_relu convolutional features of size 1024x14x14
@@ -36,6 +35,15 @@ from extractorch.resnet import ResNet
 #
 
 
+def normalize(x):
+    """Apply L2-normalization over features."""
+    if x.dim() == 2:
+        return F.normalize(x, dim=-1)
+    else:
+        n, c, h, w = x.shape
+        return F.normalize(x.view(n, c, -1), dim=1).view(n, c, h, w)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='extractor')
     parser.add_argument('-f', '--folder', type=str, required=True,
@@ -46,12 +54,8 @@ if __name__ == '__main__':
                         help='Central fraction. If < 1, focuses on the middle.')
     parser.add_argument('-w', '--width', type=int, default=224,
                         help='Final image width and height.')
-    parser.add_argument('-m', '--model', type=str, default='resnet50',
-                        help='resnet[18/34/50/152], resnet18_places365, resnet50_places365')
-    parser.add_argument('-n', '--l2norm', action='store_true',
-                        help='Save l2 normalized version as well (for layer != prob).')
-    parser.add_argument('-l', '--layer', default='res5c_relu',
-                        help='res4f_relu/res5c_relu/avgpool/prob')
+    parser.add_argument('-m', '--model', type=str, default='resnet50:res5c_relu',
+                        help='<model_name:layer> e.g. resnet50:res5c_relu')
     parser.add_argument('-d', '--device', default='cpu',
                         help='cpu or gpu')
 
@@ -81,38 +85,43 @@ if __name__ == '__main__':
     loader = data.DataLoader(dataset, batch_size=args.batch_size)
 
     # Create model
-    model = ResNet(args.model, args.layer)
+    model_type, *layer_type = args.model.lower().split(':')
+    layer_type = '' if len(layer_type) == 0 else layer_type[0]
+    if model_type == 'alexnet':
+        print('INFO: Alexnet only extracts from last conv layer.')
+        model = get_cnn('alexnet')()
+        layer_type = 'lastconv'
+    elif model_type.startswith('resnet'):
+        model = get_cnn('resnet')(
+            model_type=model_type, layer_type=layer_type)
+    elif model_type.startswith(('vgg', 'densenet')):
+        print('INFO: {} only extracts from last conv layer.'.format(model_type))
+        model_prefix = re.search('([a-z]*)([0-9]*)', model_type)[1]
+        layer_type = 'lastconv'
+        model = get_cnn(model_prefix)(model_type=model_type)
 
-    # Create placeholder
-    feats = np.zeros((len(dataset), *model.output_shape(args.width, args.width)))
-    if args.layer != 'prob' and args.l2norm:
-        feats_norm = np.zeros(
-            (len(dataset), *model.output_shape(args.width, args.width)))
+    # Do not L2-normalize probabilities
+    normalize_fn = normalize if layer_type != 'prob' else lambda x: x
 
-    model.set_device(args.device)
+    # Create placeholder tensor
+    feats = np.zeros(
+        (len(dataset), *model.output_shape(args.width, args.width)))
+    print('Output tensor shape:', feats.shape)
 
     ######################
     # Main extraction loop
     ######################
+    model.set_device(args.device)
     for bidx, batch in enumerate(tqdm(loader, unit='batch', ncols=70)):
-        out = model(batch.to(device=args.device))
-        feats[bidx * bs: (bidx + 1) * bs] = out.data.to('cpu')
-
-        if args.layer != 'prob' and args.l2norm:
-            if out.dim() == 2:
-                feats_norm[bidx * bs: (bidx + 1) * bs] = F.normalize(
-                        out, dim=-1).data.to('cpu')
-            else:
-                n, c, h, w = out.shape
-                feats_norm[bidx * bs: (bidx + 1) * bs] = F.normalize(
-                    out.view(n, c, -1), dim=1).view(n, c, h, w).data.to('cpu')
+        # Get the activations and normalize
+        feats[bidx * bs: (bidx + 1) * bs] = normalize_fn(
+            model(batch.to(device=args.device))).data.to('cpu')
 
     ###############
     # Save the file
     ###############
     output = "{}-{}-{}-r{}-c{}".format(
-        split, args.model, args.layer, resize_width, args.width)
-    np.save(output, feats.astype('float16'))
-    if args.layer != 'prob' and args.l2norm:
+        split, model_type, layer_type, resize_width, args.width)
+    if layer_type != 'prob':
         output += '-l2norm'
-        np.save(output, feats_norm.astype('float16'))
+    np.save(output, feats.astype('float16'))

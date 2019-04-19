@@ -9,14 +9,14 @@ from .config import DATA_ROOT
 
 
 class ResNet:
-    def __init__(self, model_type, layer):
-        self.model_type = model_type
+    def __init__(self, **kwargs):
+        self.model_type = kwargs['model_type']
+        self.layer_type = kwargs['layer_type']
 
         # Strip out '_places365'
         self.model_class = self.model_type.split('_')[0].lower()
-        self.layer = layer
         self.num_classes = self.get_num_classes()
-        self.pretrained = False if model_type.endswith('365') else True
+        self.pretrained = False if self.model_type.endswith('365') else True
 
         klass = getattr(models, self.model_class)
         print('Creating CNN instance {}'.format(self.model_type))
@@ -30,12 +30,12 @@ class ResNet:
         del self.model.avgpool
         self.model.avgpool = nn.AdaptiveAvgPool2d((1, 1))
 
-        if self.layer != 'prob':
+        if self.layer_type != 'prob':
             # Remove final classifier layer
             del self.model.fc
 
         # Set extractor
-        self.__extractor = getattr(self, self.layer)
+        self.__extractor = getattr(self, self.layer_type)
 
         # Turn on eval mode
         self.model.train(False)
@@ -82,9 +82,9 @@ class ResNet:
         return self.__extractor(x)
 
     def output_shape(self, width, height):
-        if self.layer == 'avgpool':
+        if self.layer_type == 'avgpool':
             return (2048,)
-        elif self.layer == 'prob':
+        elif self.layer_type == 'prob':
             return (self.num_classes,)
         else:
             dummy = torch.zeros(1, 3, width, height, device='cpu')
