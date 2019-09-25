@@ -105,7 +105,8 @@ if __name__ == '__main__':
 
     # Create placeholder tensor
     feats = np.zeros(
-        (len(dataset), *model.output_shape(args.width, args.width)))
+        (len(dataset), *model.output_shape(args.width, args.width)),
+        dtype='float16')
     print('Output tensor shape:', feats.shape)
 
     ######################
@@ -115,7 +116,7 @@ if __name__ == '__main__':
     for bidx, batch in enumerate(tqdm(loader, unit='batch', ncols=70)):
         # Get the activations and normalize
         feats[bidx * bs: (bidx + 1) * bs] = normalize_fn(
-            model(batch.to(device=args.device))).data.to('cpu')
+            model(batch.to(device=args.device))).data.to('cpu').numpy().astype('float16')
 
     ###############
     # Save the file
@@ -124,4 +125,4 @@ if __name__ == '__main__':
         split, model_type, layer_type, resize_width, args.width)
     if layer_type != 'prob':
         output += '-l2norm'
-    np.save(output, feats.astype('float16'))
+    np.save(output, feats)
