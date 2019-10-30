@@ -44,11 +44,14 @@ class ImageFolderDataset(Dataset):
                 "index.txt does not exist in {}".format(self.root)))
 
         self.image_files = []
+        self.image_names = []
         with self.index.open() as f:
             for fname in f:
-                fname = self.root / fname.strip()
-                assert fname.exists(), "{} does not exist.".format(fname)
-                self.image_files.append(str(fname))
+                fname = fname.strip()
+                fpath = self.root / fname
+                assert fpath.exists(), "{} does not exist.".format(fpath)
+                self.image_files.append(str(fpath))
+                self.image_names.append(fname)
 
     def read_image(self, fname):
         with open(fname, 'rb') as f:

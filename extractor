@@ -48,6 +48,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='extractor')
     parser.add_argument('-f', '--folder', type=str, required=True,
                         help='Folder to image files i.e. /images/train')
+    parser.add_argument('-o', '--output-folder', type=str, default='.',
+                        help='Output folder for feature files.')
+    parser.add_argument('-z', '--npz', action='store_true',
+                        help='Create a compressed .npz file with keys as image names.')
     parser.add_argument('-b', '--batch-size', type=int, default=256,
                         help='Batch size for forward pass.')
     parser.add_argument('-c', '--central-fraction', type=float, default=1.0,
@@ -123,6 +127,17 @@ if __name__ == '__main__':
     ###############
     output = "{}-{}-{}-r{}-c{}".format(
         split, model_type, layer_type, resize_width, args.width)
+    fold = Path(args.output_folder)
+    fold.mkdir(exist_ok=True)
+    output = str(fold / Path(output))
+
     if layer_type != 'prob':
         output += '-l2norm'
-    np.save(output, feats)
+
+    # Save the file
+    if args.npz:
+        print('Saving file as .npz key-value store')
+        feat_dict = {fname: feat[None, :] for (fname, feat) in zip(dataset.image_names, feats)}
+        np.savez_compressed(output, **feat_dict)
+    else:
+        np.save(output, feats)
