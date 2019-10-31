@@ -50,6 +50,8 @@ class ImageFolderDataset(Dataset):
                 fname = fname.strip()
                 fpath = self.root / fname
                 assert fpath.exists(), "{} does not exist.".format(fpath)
+                assert fname.lower().endswith(('.jpg', '.jpeg', '.png')), \
+                    f"{fname!r} does not seem to be an image file."
                 self.image_files.append(str(fpath))
                 self.image_names.append(fname)
 
